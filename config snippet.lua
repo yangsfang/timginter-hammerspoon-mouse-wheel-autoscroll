@@ -6,6 +6,8 @@
 -- id of mouse wheel button
 local mouseScrollButtonId = 2
 
+local keyboardScrollButtonId = 80
+
 -- scroll speed and direction config
 local scrollSpeedMultiplier = 0.15
 local scrollSpeedHorizontalMultiplier = scrollSpeedMultiplier
@@ -201,10 +203,93 @@ function mouseScrollTimerFunction()
     mouseScrollTimer = hs.timer.doAfter(mouseScrollTimerDelay, mouseScrollTimerFunction)
 end
 
+keyboardScrollKeyDown = hs.eventtap.new({ hs.eventtap.event.types.keyDown }, function(e)
+    -- uncomment line below to see the ID of pressed button
+    --print(e:getProperty(hs.eventtap.event.properties['keyboardEventKeycode']))
+    --print(e:getProperty(hs.eventtap.event.properties['keyboardEventAutorepeat']))
+
+    if e:getProperty(hs.eventtap.event.properties['keyboardEventKeycode']) == keyboardScrollButtonId then
+        -- Do not process key holding events
+        if e:getProperty(hs.eventtap.event.properties['keyboardEventAutorepeat']) ~= 0 then
+            -- update mouse coordinates (normally it's updated by overrideScrollMouseDrag which will not fire with keyboard)
+            mouseScrollPos = hs.mouse.absolutePosition()
+            mouseScrollDragPosX = mouseScrollPos.x
+            mouseScrollDragPosY = mouseScrollPos.y
+
+            return true
+        end
+
+        -- remove circle if exists
+        if mouseScrollCircle then
+            mouseScrollCircle:delete()
+            mouseScrollCircle = nil
+        end
+
+        -- stop timer if running
+        if mouseScrollTimer then
+            mouseScrollTimer:stop()
+            mouseScrollTimer = nil
+        end
+
+        -- save mouse coordinates
+        mouseScrollStartPos = hs.mouse.absolutePosition()
+        mouseScrollDragPosX = mouseScrollStartPos.x
+        mouseScrollDragPosY = mouseScrollStartPos.y
+
+        -- start scroll timer
+        mouseScrollTimer = hs.timer.doAfter(mouseScrollTimerDelay, mouseScrollTimerFunction)
+
+        -- don't send scroll button down event
+        return true
+    end
+end)
+
+keyboardScrollKeyUp = hs.eventtap.new({ hs.eventtap.event.types.keyUp }, function(e)
+    -- uncomment line to see key releases
+    --print('key up')
+
+    if e:getProperty(hs.eventtap.event.properties['keyboardEventKeycode']) == keyboardScrollButtonId then
+        -- send original button up event if released within 'mouseScrollCircleDeadZone' pixels of original position and scroll circle doesn't exist
+        mouseScrollPos = hs.mouse.absolutePosition()
+        xDiff = math.abs(mouseScrollPos.x - mouseScrollStartPos.x)
+        yDiff = math.abs(mouseScrollPos.y - mouseScrollStartPos.y)
+        if (xDiff < mouseScrollCircleDeadZone and yDiff < mouseScrollCircleDeadZone) and not mouseScrollCircle then
+            -- disable scroll mouse override
+            overrideScrollMouseDown:stop()
+            overrideScrollMouseUp:stop()
+
+            -- send scroll mouse click
+            hs.eventtap.otherClick(e:location(), mouseScrollButtonId)
+
+            -- re-enable scroll mouse override
+            overrideScrollMouseDown:start()
+            overrideScrollMouseUp:start()
+        end
+
+        -- remove circle if exists
+        if mouseScrollCircle then
+            mouseScrollCircle:delete()
+            mouseScrollCircle = nil
+        end
+
+        -- stop timer if running
+        if mouseScrollTimer then
+            mouseScrollTimer:stop()
+            mouseScrollTimer = nil
+        end
+
+        -- don't send scroll button up event
+        return true
+    end
+end)
+
 -- start override functions
 overrideScrollMouseDown:start()
 overrideScrollMouseUp:start()
 overrideScrollMouseDrag:start()
+
+keyboardScrollKeyDown:start()
+keyboardScrollKeyUp:start()
 
 ------------------------------------------------------------------------------------------
 -- END OF AUTOSCROLL WITH MOUSE WHEEL BUTTON
